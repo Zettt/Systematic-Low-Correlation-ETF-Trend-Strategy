@@ -39,7 +39,7 @@ class Backtester:
         if len(equity_curve) < 2:
             return (0.0, None, None)
         
-        peak = equity_curve[0]
+        peak = equity_curve.iloc[0]
         max_drawdown = 0.0
         peak_date = equity_curve.index[0]
         trough_date = equity_curve.index[0]
@@ -83,7 +83,7 @@ class Backtester:
         rebalance_dates = pd.date_range(
             start=self.daily_prices.index[0],
             end=self.daily_prices.index[-1],
-            freq=rebalance_freq
+            freq='ME' if rebalance_freq == 'M' else rebalance_freq
         )
         
         # Run through each day
