@@ -64,14 +64,14 @@ class Backtester:
         excess_returns = returns - risk_free_rate/252
         return np.sqrt(252) * excess_returns.mean() / excess_returns.std()
     
-    def run_backtest(self, initial_capital=10000, rebalance_freq='W-FRI'):
+    def run_backtest(self, initial_capital=10000, rebalance_freq='M'):
         """
         Run event-driven backtest
         
         Args:
             initial_capital: Starting portfolio value
             rebalance_freq: Pandas offset string for rebalance frequency
-                           e.g. 'W-FRI' for weekly on Fridays
+                           'M' for month-end rebalancing (changed from 'W-FRI')
         """
         # Initialize portfolio
         portfolio_value = pd.Series(index=self.daily_prices.index, dtype=float)
@@ -79,7 +79,7 @@ class Backtester:
         holdings = {}
         trades = []
         
-        # Get rebalance dates
+        # Get rebalance dates (month-end)
         rebalance_dates = pd.date_range(
             start=self.daily_prices.index[0],
             end=self.daily_prices.index[-1],

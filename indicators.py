@@ -107,7 +107,7 @@ def generate_allocations(daily_prices, weekly_prices, current_holdings=None):
         return {'CASH': 1.0}
     
     # Calculate correlations
-    correlations = calculate_correlations(weekly_prices).add_suffix('_corr')
+    correlations = calculate_correlations(weekly_prices)  # Removed redundant suffix
     last_correlations = correlations.iloc[-1].to_dict()
     
     # Filter to only include ETFs that passed trend filter
