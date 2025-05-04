@@ -57,6 +57,44 @@ def calculate_indicators():
     
     return indicators.reset_index()
 
+def generate_allocations(daily_prices, weekly_prices):
+    """
+    Generate target portfolio allocations based on:
+    - Trend filters (Close > SMA50 and SMA50 > SMA200)
+    - Lowest correlation to SPY
+    - Equal weighting among 1-3 selected ETFs
+    
+    Returns dict of {etf: target_weight} allocations
+    """
+    # Filter ETFs by trend
+    trend_signals = check_trend(daily_prices)
+    filtered = [etf.replace('_trend', '') for etf in trend_signals.columns
+              if trend_signals[etf].iloc[-1]]
+    
+    # If no ETFs pass trend filter, return all cash
+    if not filtered:
+        return {'CASH': 1.0}
+    
+    # Calculate correlations
+    correlations = calculate_correlations(weekly_prices).add_suffix('_corr')
+    last_correlations = correlations.iloc[-1].to_dict()
+    
+    # Filter to only include ETFs that passed trend filter
+    corr_subset = {k.replace('_corr', ''): v
+                  for k, v in last_correlations.items()
+                  if k.replace('_corr', '') in filtered}
+    
+    # Sort by correlation (ascending) and take top 3
+    sorted_etfs = sorted(corr_subset.items(), key=lambda x: x[1])
+    selected = [etf for etf, corr in sorted_etfs[:3]]
+    
+    # Equal weight allocation
+    num_selected = len(selected)
+    if num_selected == 1:
+        return {selected[0]: 1.0}
+    else:
+        return {etf: 1.0/num_selected for etf in selected}
+
 if __name__ == "__main__":
     indicators_df = calculate_indicators()
     print(indicators_df.head())
