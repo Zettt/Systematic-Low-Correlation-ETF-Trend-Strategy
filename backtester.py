@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from indicators import generate_allocations
 
 class Backtester:
@@ -210,26 +212,52 @@ class Backtester:
         if self.equity_curve is None:
             raise ValueError("Must run backtest first")
             
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
-        
-        # Equity curve comparison
+        # Create normalized series for comparison
         norm_equity = self.equity_curve / self.equity_curve.iloc[0]
         norm_spy = self.daily_prices['SPY'] / self.daily_prices['SPY'].iloc[0]
         
-        ax1.plot(norm_equity.index, norm_equity, label='Strategy')
-        ax1.plot(norm_spy.index, norm_spy, label='SPY')
-        ax1.set_title('Equity Curve Comparison')
-        ax1.set_ylabel('Normalized Value')
-        ax1.legend()
-        ax1.grid(True)
-        
-        # Drawdown plot
+        # Calculate drawdowns
         peak = self.equity_curve.cummax()
-        drawdown = (self.equity_curve - peak) / peak
-        ax2.fill_between(drawdown.index, drawdown*100, 0, alpha=0.3, color='red')
-        ax2.set_title('Strategy Drawdown')
-        ax2.set_ylabel('Drawdown (%)')
-        ax2.grid(True)
+        drawdown = (self.equity_curve - peak) / peak * 100  # Convert to percentage
         
-        plt.tight_layout()
+        # Create subplots with 2 rows
+        fig = make_subplots(rows=2, cols=1, 
+                           shared_xaxes=True,
+                           vertical_spacing=0.08,
+                           subplot_titles=('Equity Curve Comparison', 'Strategy Drawdown (%)'))
+        
+        # Add equity curves to top subplot
+        fig.add_trace(
+            go.Scatter(x=norm_equity.index, y=norm_equity, 
+                      name='Strategy', line=dict(color='blue')),
+            row=1, col=1
+        )
+        
+        fig.add_trace(
+            go.Scatter(x=norm_spy.index, y=norm_spy, 
+                      name='SPY', line=dict(color='orange')),
+            row=1, col=1
+        )
+        
+        # Add drawdown to bottom subplot
+        fig.add_trace(
+            go.Scatter(x=drawdown.index, y=drawdown, 
+                      fill='tozeroy', 
+                      name='Drawdown', 
+                      line=dict(color='red')),
+            row=2, col=1
+        )
+        
+        # Update layout
+        fig.update_layout(
+            height=800,
+            width=1000,
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            margin=dict(l=50, r=50, t=80, b=50)
+        )
+        
+        fig.update_yaxes(title_text="Normalized Value", row=1, col=1)
+        fig.update_yaxes(title_text="Drawdown (%)", row=2, col=1)
+        
         return fig
