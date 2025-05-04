@@ -43,6 +43,7 @@ def fetch_data(tickers, start_date=None, end_date=None):
     """
     if start_date is None:
         start_date = (datetime.now() - timedelta(days=365*10)).strftime('%Y-%m-%d')
+        # start_date = (datetime.now() - timedelta(days=365*30)).strftime('%Y-%m-%d')
     if end_date is None:
         end_date = datetime.now().strftime('%Y-%m-%d')
     

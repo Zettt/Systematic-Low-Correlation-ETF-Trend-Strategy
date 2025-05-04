@@ -101,13 +101,31 @@ class Backtester:
             else:
                 portfolio_value[current_date] = portfolio_value[prev_date]
             
-            # Check if rebalance day
-            if current_date in rebalance_dates:
-                # Get allocations for current date
-                allocations = generate_allocations(
-                    self.daily_prices.loc[:current_date].reset_index(),
-                    self.weekly_prices.loc[:current_date].reset_index()
-                )
+            # Convert holdings to allocation dict for signal checking
+            current_allocations = {}
+            if holdings:
+                total_value = portfolio_value[current_date]
+                current_allocations = {
+                    etf: (shares * self.daily_prices.loc[current_date, etf]) / total_value
+                    for etf, shares in holdings.items()
+                }
+            
+            # Check signals daily
+            allocations = generate_allocations(
+                self.daily_prices.loc[:current_date].reset_index(),
+                self.weekly_prices.loc[:current_date].reset_index(),
+                current_allocations if holdings else None
+            )
+            
+            # Execute trades if we get exit signal or it's rebalance day
+            should_trade = current_date in rebalance_dates
+            
+            # Check if we need to exit positions
+            if holdings and 'CASH' in allocations and not should_trade:
+                # Exit signal triggered outside rebalance date
+                should_trade = True
+            
+            if should_trade:
                 
                 # Execute trades
                 if 'CASH' in allocations:
@@ -119,7 +137,8 @@ class Backtester:
                                 'etf': etf,
                                 'shares': -shares,
                                 'price': self.daily_prices.loc[current_date, etf],
-                                'type': 'sell'
+                                'type': 'sell',
+                                'reason': 'exit_signal' if not current_date in rebalance_dates else 'rebalance'
                             })
                     holdings = {}
                 else:
@@ -145,7 +164,8 @@ class Backtester:
                                 'etf': etf,
                                 'shares': trade_shares,
                                 'price': self.daily_prices.loc[current_date, etf],
-                                'type': 'buy' if trade_shares > 0 else 'sell'
+                                'type': 'buy' if trade_shares > 0 else 'sell',
+                                'reason': 'rebalance'
                             })
                     
                     holdings = {etf: shares for etf, shares in target_shares.items()}
