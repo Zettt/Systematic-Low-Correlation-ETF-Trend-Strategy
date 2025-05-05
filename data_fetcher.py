@@ -4,11 +4,7 @@ import numpy as np
 import logging
 from datetime import datetime, timedelta
 import os
-import configparser
-
-# Load configuration
-config = configparser.ConfigParser()
-config.read('config.ini')
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -20,33 +16,41 @@ logging.basicConfig(
     ]
 )
 
-# ETF universe and benchmark
+# Constants
 ETF_UNIVERSE = ['TLT', 'TBF', 'DBC', 'IEF', 'GLD', 'QQQ', 'HYG']
 BENCHMARK = 'SPY'
+MAX_RETRIES = 3
+RETRY_DELAY = 60  # seconds
 
 def fetch_data(tickers, start_date=None, end_date=None):
     """
-    Fetch daily price data from Yahoo Finance
+    Fetch daily price data from Yahoo Finance with retry logic
     """
     if start_date is None:
         start_date = (datetime.now() - timedelta(days=365*10)).strftime('%Y-%m-%d')
-        # start_date = (datetime.now() - timedelta(days=365*30)).strftime('%Y-%m-%d')
     if end_date is None:
         end_date = datetime.now().strftime('%Y-%m-%d')
     
-    try:
-        data = yf.download(tickers + [BENCHMARK], start=start_date, end=end_date)
-        if data.empty:
-            logging.error("No data returned from yfinance")
-            return None
+    for attempt in range(MAX_RETRIES):
+        try:
+            data = yf.download(tickers + [BENCHMARK], start=start_date, end=end_date)
+            if data.empty:
+                logging.error(f"No data returned from yfinance (attempt {attempt + 1}/{MAX_RETRIES})")
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(RETRY_DELAY)
+                continue
+                
+            # Get adjusted close prices
+            adj_close = data['Adj Close'] if 'Adj Close' in data else data['Close']
+            logging.info(f"Successfully fetched data for {tickers} and {BENCHMARK}")
+            return adj_close
             
-        # Get adjusted close prices
-        adj_close = data['Adj Close'] if 'Adj Close' in data else data['Close']
-        logging.info(f"Successfully fetched data for {tickers} and {BENCHMARK}")
-        return adj_close
-    except Exception as e:
-        logging.error(f"Error fetching data: {str(e)}")
-        return None
+        except Exception as e:
+            logging.error(f"Error fetching data (attempt {attempt + 1}/{MAX_RETRIES}): {str(e)}")
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(RETRY_DELAY)
+                
+    return None
 
 def validate_data(df):
     """
