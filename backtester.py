@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 from indicators import generate_allocations
 
 class Backtester:
-    def __init__(self, daily_prices, weekly_prices):
+    def __init__(self, daily_prices, weekly_prices, transaction_cost=0.001):
         """
         Initialize backtester with price data
         
@@ -21,6 +21,8 @@ class Backtester:
         self.weekly_prices = weekly_prices.set_index('Date')
         self.equity_curve = None
         self.trades = None
+        self.transaction_cost = transaction_cost
+        self.current_holdings = {}
         
     def calculate_cagr(self, equity_curve):
         """Calculate Compound Annual Growth Rate"""
@@ -66,6 +68,17 @@ class Backtester:
         excess_returns = returns - risk_free_rate/252
         return np.sqrt(252) * excess_returns.mean() / excess_returns.std()
     
+    def check_drift(self, current_allocations, allocs, tolerance=0.25):
+        """Check if any position has drifted beyond tolerance"""
+        for etf in current_allocations:
+            if etf not in allocs:
+                continue
+            target = allocs[etf]
+            actual = current_allocations[etf]
+            if abs(actual - target) > target * tolerance:
+                return True
+        return False
+
     def run_backtest(self, initial_capital=10000, rebalance_freq='M'):
         """
         Run event-driven backtest
@@ -119,29 +132,42 @@ class Backtester:
                 current_allocations if holdings else None
             )
             
-            # Execute trades if we get exit signal or it's rebalance day
+            # Execute trades if we get exit signal, or drift too much, or it's rebalance day
             should_trade = current_date in rebalance_dates
+            
+            # Check drift
+            if holdings and not should_trade:
+                has_drift = self.check_drift(current_allocations, allocations)
+                should_trade = should_trade or has_drift
             
             # Check if we need to exit positions
             if holdings and 'CASH' in allocations and not should_trade:
                 # Exit signal triggered outside rebalance date
                 should_trade = True
+                
             
             if should_trade:
                 
-                # Execute trades
+                # Execute trades with transaction costs
                 if 'CASH' in allocations:
                     # Move to cash
                     if holdings:
+                        total_cost = 0
                         for etf, shares in holdings.items():
+                            price = self.daily_prices.loc[current_date, etf]
+                            proceeds = shares * price
+                            cost = proceeds * self.transaction_cost
+                            total_cost += cost
                             trades.append({
                                 'date': current_date,
                                 'etf': etf,
                                 'shares': -shares,
-                                'price': self.daily_prices.loc[current_date, etf],
+                                'price': price,
                                 'type': 'sell',
-                                'reason': 'exit_signal' if not current_date in rebalance_dates else 'rebalance'
+                                'reason': 'exit_signal' if not current_date in rebalance_dates else 'rebalance',
+                                'cost': cost
                             })
+                        portfolio_value[current_date] -= total_cost
                     holdings = {}
                 else:
                     # Rebalance to target allocations
@@ -154,28 +180,37 @@ class Backtester:
                         for etf in allocations
                     }
                     
-                    # Execute trades
+                    # Execute trades with transaction costs
+                    total_cost = 0
                     for etf in set(holdings.keys()).union(allocations.keys()):
                         current_shares = holdings.get(etf, 0)
                         target_share = target_shares.get(etf, 0)
+                        price = self.daily_prices.loc[current_date, etf]
                         
                         if not np.isclose(current_shares, target_share):
                             trade_shares = target_share - current_shares
+                            trade_value = abs(trade_shares * price)
+                            cost = trade_value * self.transaction_cost
+                            total_cost += cost
                             trades.append({
                                 'date': current_date,
                                 'etf': etf,
                                 'shares': trade_shares,
-                                'price': self.daily_prices.loc[current_date, etf],
+                                'price': price,
                                 'type': 'buy' if trade_shares > 0 else 'sell',
-                                'reason': 'rebalance'
+                                'reason': 'rebalance',
+                                'cost': cost
                             })
                     
+                    # Apply transaction costs to portfolio value
+                    portfolio_value[current_date] -= total_cost
                     holdings = {etf: shares for etf, shares in target_shares.items()}
         
         self.equity_curve = portfolio_value
         self.trades = pd.DataFrame(trades)
         return self
     
+
     def get_performance_metrics(self, risk_free_rate=0.0):
         """Calculate and return key performance metrics"""
         if self.equity_curve is None:
@@ -192,6 +227,25 @@ class Backtester:
         spy_max_dd = self.calculate_max_drawdown(self.daily_prices['SPY'])[0]
         spy_sharpe = self.calculate_sharpe(spy_returns, risk_free_rate)
         
+        # Buy-and-hold-all ETFs metrics
+        etf_columns = [col for col in self.daily_prices.columns if col != 'SPY']
+        if etf_columns:
+            # Calculate equal-weighted portfolio
+            normalized_etfs = self.daily_prices[etf_columns].div(
+                self.daily_prices[etf_columns].iloc[0]
+            )
+            # Calculate the equal-weighted portfolio value (starting at the same initial capital)
+            equal_weight_etf = normalized_etfs.mean(axis=1) * self.equity_curve.iloc[0]
+            
+            equal_weight_returns = equal_weight_etf.pct_change().dropna()
+            equal_weight_cagr = self.calculate_cagr(equal_weight_etf)
+            equal_weight_max_dd = self.calculate_max_drawdown(equal_weight_etf)[0]
+            equal_weight_sharpe = self.calculate_sharpe(equal_weight_returns, risk_free_rate)
+        else:
+            equal_weight_cagr = 0.0
+            equal_weight_max_dd = 0.0
+            equal_weight_sharpe = 0.0
+        
         return {
             'strategy': {
                 'CAGR': cagr,
@@ -204,6 +258,11 @@ class Backtester:
                 'CAGR': spy_cagr,
                 'Max Drawdown': spy_max_dd,
                 'Sharpe Ratio': spy_sharpe
+            },
+            'all_etfs': {
+                'CAGR': equal_weight_cagr,
+                'Max Drawdown': equal_weight_max_dd,
+                'Sharpe Ratio': equal_weight_sharpe
             }
         }
     
@@ -215,6 +274,15 @@ class Backtester:
         # Create normalized series for comparison
         norm_equity = self.equity_curve / self.equity_curve.iloc[0]
         norm_spy = self.daily_prices['SPY'] / self.daily_prices['SPY'].iloc[0]
+        
+        # Calculate equal-weighted ETF portfolio
+        etf_columns = [col for col in self.daily_prices.columns if col != 'SPY']
+        if etf_columns:
+            normalized_etfs = self.daily_prices[etf_columns].div(
+                self.daily_prices[etf_columns].iloc[0]
+            )
+            equal_weight_etf = normalized_etfs.mean(axis=1) * self.equity_curve.iloc[0]
+            norm_etfs = equal_weight_etf / equal_weight_etf.iloc[0]
         
         # Calculate drawdowns
         peak = self.equity_curve.cummax()
@@ -238,6 +306,14 @@ class Backtester:
                       name='SPY', line=dict(color='orange')),
             row=1, col=1
         )
+        
+        # Add equal-weighted ETF portfolio if available
+        if etf_columns:
+            fig.add_trace(
+                go.Scatter(x=norm_etfs.index, y=norm_etfs, 
+                          name='Equal-Weight ETFs', line=dict(color='green')),
+                row=1, col=1
+            )
         
         # Add drawdown to bottom subplot
         fig.add_trace(
