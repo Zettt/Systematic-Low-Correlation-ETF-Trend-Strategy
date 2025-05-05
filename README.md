@@ -104,6 +104,12 @@ python backtester.py
 jupyter notebook backtest_analysis.ipynb
 ```
 
+5. Run test_strategy.py
+```bash
+python test_strategy.py
+```
+This will output the actual trades that need to happen, when run.
+
 ## Disclaimer
 
 This is a proof-of-concept implementation meant to demonstrate the strategy's mechanics and potential. It is not financial advice. The original strategy was designed and tested on Portfolio123's platform, and this implementation may have variations in results due to differences in data sources, execution assumptions, and implementation details.
