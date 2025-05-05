@@ -75,7 +75,6 @@ The strategy trades the following ETFs:
 - `backtester.py`: Main backtesting engine implementation
 - `data_fetcher.py`: Handles data acquisition for ETFs
 - `indicators.py`: Technical indicator calculations
-- `config.ini`: Strategy configuration parameters
 - `test_strategy.py`: Strategy testing and validation
 - `backtest_analysis.ipynb`: Jupyter notebook for analysis and visualization
 - `requirements.txt`: Python dependencies
@@ -92,14 +91,15 @@ git clone https://github.com/yourusername/Systematic-Low-Correlation-ETF-Trend-S
 pip install -r requirements.txt
 ```
 
-3. Configure your data sources in `config.ini`
+3. Run the data fetcher and initialize the indicator values
+```bash
+python data_fetcher.py && python indicators.py
+```
 
-4. Run the backtester
+4. Run the backtester or open the Jupyter notebook
 ```bash
 python backtester.py
 ```
-
-5. Analyze results in the Jupyter notebook
 ```bash
 jupyter notebook backtest_analysis.ipynb
 ```
