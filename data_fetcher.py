@@ -2,12 +2,9 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import logging
-import smtplib
-from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 import os
 import configparser
-import json
 
 # Load configuration
 config = configparser.ConfigParser()
@@ -26,16 +23,6 @@ logging.basicConfig(
 # ETF universe and benchmark
 ETF_UNIVERSE = ['TLT', 'TBF', 'DBC', 'IEF', 'GLD', 'QQQ', 'HYG']
 BENCHMARK = 'SPY'
-
-# Email settings
-EMAIL_CONFIG = {
-    'sender': config.get('EMAIL', 'SENDER'),
-    'recipients': json.loads(config.get('EMAIL', 'RECIPIENTS')),
-    'smtp_server': config.get('EMAIL', 'SMTP_SERVER'),
-    'smtp_port': config.getint('EMAIL', 'SMTP_PORT'),
-    'smtp_username': config.get('EMAIL', 'SMTP_USERNAME'),
-    'smtp_password': config.get('EMAIL', 'SMTP_PASSWORD')
-}
 
 def fetch_data(tickers, start_date=None, end_date=None):
     """
@@ -109,28 +96,6 @@ def main():
         weekly_data = generate_weekly_data(daily_data)
         save_data(weekly_data, 'data/weekly_prices.csv')
 
-def send_email(subject, body):
-    """Send email notification"""
-    try:
-        msg = MIMEText(body)
-        msg['Subject'] = subject
-        msg['From'] = EMAIL_CONFIG['sender']
-        msg['To'] = ', '.join(EMAIL_CONFIG['recipients'])
-
-        with smtplib.SMTP(
-            EMAIL_CONFIG['smtp_server'],
-            EMAIL_CONFIG['smtp_port']
-        ) as server:
-            server.starttls()
-            server.login(
-                EMAIL_CONFIG['smtp_username'],
-                EMAIL_CONFIG['smtp_password']
-            )
-            server.send_message(msg)
-        logging.info("Email notification sent")
-    except Exception as e:
-        logging.error(f"Failed to send email: {str(e)}")
-
 def get_last_fetch_date():
     """Get the last successful fetch date from log"""
     try:
@@ -161,4 +126,3 @@ if __name__ == "__main__":
     except Exception as e:
         error_msg = f"Data fetcher failed: {str(e)}"
         logging.error(error_msg)
-        send_email("Data Fetcher Failure", error_msg)
