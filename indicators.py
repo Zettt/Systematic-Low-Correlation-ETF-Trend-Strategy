@@ -115,9 +115,9 @@ def generate_allocations(daily_prices, weekly_prices, current_holdings=None):
                   for k, v in last_correlations.items()
                   if k.replace('_corr', '') in filtered}
     
-    # Sort by correlation (ascending) and take top 3
+    # Sort by correlation (ascending) and take top 6
     sorted_etfs = sorted(corr_subset.items(), key=lambda x: x[1])
-    selected = [etf for etf, corr in sorted_etfs[:3]]
+    selected = [etf for etf, corr in sorted_etfs[:6]]
     
     # Equal weight allocation
     num_selected = len(selected)
