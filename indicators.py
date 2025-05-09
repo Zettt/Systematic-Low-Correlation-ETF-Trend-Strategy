@@ -20,7 +20,7 @@ def calculate_correlations(weekly_prices, window=26):
 def check_entry_signals(daily_prices):
     """
     Check entry conditions:
-    Close > SMA50 and SMA50 > SMA200
+    SMA50 is above SMA200 (uptrend)
     Returns DataFrame with boolean entry signals
     """
     daily_prices = daily_prices.set_index('Date')
@@ -28,13 +28,14 @@ def check_entry_signals(daily_prices):
     for etf in daily_prices.columns:
         sma50 = calculate_sma(daily_prices[etf], 50)
         sma200 = calculate_sma(daily_prices[etf], 200)
-        entry_signals[f'{etf}_entry'] = (daily_prices[etf] > sma50) & (sma50 > sma200)
+        # Check if in uptrend: SMA50 > SMA200
+        entry_signals[f'{etf}_entry'] = sma50 > sma200
     return pd.DataFrame(entry_signals)
 
 def check_exit_signals(daily_prices):
     """
     Check exit conditions:
-    Close < SMA200 OR SMA50 < SMA200
+    SMA50 is below SMA200 (downtrend)
     Returns DataFrame with boolean exit signals
     """
     daily_prices = daily_prices.set_index('Date')
@@ -42,7 +43,8 @@ def check_exit_signals(daily_prices):
     for etf in daily_prices.columns:
         sma50 = calculate_sma(daily_prices[etf], 50)
         sma200 = calculate_sma(daily_prices[etf], 200)
-        exit_signals[f'{etf}_exit'] = (daily_prices[etf] < sma200) | (sma50 < sma200)
+        # Check if in downtrend: SMA50 < SMA200
+        exit_signals[f'{etf}_exit'] = sma50 < sma200
     return pd.DataFrame(exit_signals)
 
 def calculate_indicators():
@@ -76,8 +78,8 @@ def calculate_indicators():
 def generate_allocations(daily_prices, weekly_prices, current_holdings=None):
     """
     Generate target portfolio allocations based on:
-    - Entry signals (Close > SMA50 and SMA50 > SMA200)
-    - Exit signals (Close < SMA200 OR SMA50 < SMA200)
+    - Entry signals (SMA50 above SMA200 indicating uptrend)
+    - Exit signals (SMA50 below SMA200 indicating downtrend)
     - Lowest correlation to SPY
     - Equal weighting among 1-3 selected ETFs
     
