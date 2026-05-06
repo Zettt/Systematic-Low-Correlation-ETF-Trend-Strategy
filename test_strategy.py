@@ -1,4 +1,5 @@
 from pathlib import Path
+import tomllib
 
 import numpy as np
 import pandas as pd
@@ -68,6 +69,42 @@ def test_strategy_data_paths_are_separated():
 
     assert core.data_dir == Path("data/core")
     assert sector_rotation.data_dir == Path("data/sector_rotation")
+
+
+def test_marimo_notebooks_replace_jupyter_notebooks():
+    notebooks_dir = Path("notebooks")
+
+    assert (notebooks_dir / "core_strategy.py").exists()
+    assert (notebooks_dir / "sector_rotation_strategy.py").exists()
+    assert not (notebooks_dir / "core_strategy.ipynb").exists()
+    assert not (notebooks_dir / "sector_rotation_strategy.ipynb").exists()
+
+
+def test_marimo_notebooks_target_correct_strategies_without_auto_fetch():
+    core_notebook = Path("notebooks/core_strategy.py").read_text(encoding="utf-8")
+    sector_notebook = Path("notebooks/sector_rotation_strategy.py").read_text(encoding="utf-8")
+
+    assert 'get_strategy("core")' in core_notebook
+    assert 'get_strategy("sector_rotation")' in sector_notebook
+    assert "fetch_button = mo.ui.run_button" in core_notebook
+    assert "fetch_button = mo.ui.run_button" in sector_notebook
+    assert "if not strategy.daily_prices_path.exists()" not in core_notebook
+    assert "if not strategy.daily_prices_path.exists()" not in sector_notebook
+
+
+def test_uv_project_metadata_declares_runtime_dependencies():
+    pyproject = Path("pyproject.toml")
+    assert pyproject.exists()
+
+    project = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]
+    dependencies = set(project["dependencies"])
+
+    assert project["name"] == "systematic-low-correlation-etf-trend-strategy"
+    assert "marimo==0.23.4" in dependencies
+    assert "pandas==2.2.1" in dependencies
+    assert "numpy==1.26.4" in dependencies
+    assert "plotly==5.24.1" in dependencies
+    assert "yfinance==0.2.36" in dependencies
 
 
 def test_backtester_runs_with_core_strategy_fixture_data():
