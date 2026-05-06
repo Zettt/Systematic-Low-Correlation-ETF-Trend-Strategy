@@ -1,120 +1,133 @@
 # Systematic Low-Correlation ETF Trend Strategy
 
-This repository contains a proof-of-concept implementation of a systematic ETF trend-following strategy originally shared by [@quant_kurtis on Twitter](https://x.com/quant_kurtis/status/1917933362897142179). The strategy is designed to complement traditional passive ETF allocations by identifying and trading ETFs with strong trends and low correlation to the S&P 500.
+This repository contains a proof-of-concept implementation of a systematic ETF trend-following strategy originally shared by [@quant_kurtis on Twitter](https://x.com/quant_kurtis/status/1917933362897142179).
 
-## Strategy Overview
+The repo now supports two separate strategy configurations that run on the same backtest engine:
 
-The strategy employs a systematic approach to select 2-3 ETFs from a diverse universe based on:
-1. Trend following signals using moving averages
-2. Correlation analysis with S&P 500
-3. Position drift management with tolerance bands
+- `core`: the original low-correlation ETF universe with `QQQ`
+- `sector_rotation`: the same diversifier sleeve, with `QQQ` replaced by S&P sector ETFs
 
-### Historical Performance (1999-Present) (according to @quant_kurtis)
-```
-- CAGR: 10.10%
-- Turnover: 117.72%
-- Maximum Drawdown: -19.61%
-- Sharpe Ratio: 0.74
-- Correlation to S&P 500: 0.04
-```
+## Strategy Rules
 
-### Backtested Performance (2015-Present)
-This implementation focuses on recent market conditions, starting from 2015, to provide a realistic assessment of the strategy's performance in modern markets. This timeframe captures diverse market environments while avoiding look-ahead bias that can occur when backtesting over extended historical periods.
+Both strategies use the same rules:
 
-![Strategy Backtest Results](backtest.png)
+1. Trend filter: `SMA50 > SMA200`
+2. Exit filter: `SMA50 < SMA200`
+3. Rank candidates by lowest 26-week correlation to `SPY`
+4. Hold the selected ETFs at equal weight
 
-```
-Strategy Performance Metrics:
-  CAGR: 7.39%
-  Max Drawdown: 14.31%
-  Sharpe Ratio: 0.81
-  Peak: 2025-04-21 00:00:00
-  Trough: 2023-03-13 00:00:00
+## Strategy Configurations
 
-SPY Benchmark:
-  CAGR: 12.4%
-  Max Drawdown: 33.7%
-  Sharpe Ratio: 0.73
+### `core`
 
-Equal-Weighted ETF Portfolio Metrics:
-  CAGR: 6.74%
-  Max Drawdown: 16.67%
-  Sharpe Ratio: 0.82
-```
+Universe:
 
-## ETF Universe
+- `TLT`
+- `TBF`
+- `DBC`
+- `IEF`
+- `GLD`
+- `QQQ`
+- `HYG`
 
-The strategy trades the following ETFs:
-- TLT (20+ Year Treasury Bonds)
-- TBF (Short 20+ Year Treasury Bonds)
-- DBC (Commodities)
-- IEF (7-10 Year Treasury Bonds)
-- GLD (Gold)
-- QQQ (Nasdaq 100)
-- HYG (High Yield Corporate Bonds)
+### `sector_rotation`
 
-## Core Strategy Rules
+Universe:
 
-### Entry Criteria
-1. Close price above 50-day moving average
-2. 50-day moving average above 200-day moving average
-3. Select 2-3 ETFs with lowest 26-week correlation to S&P 500
+- `TLT`
+- `TBF`
+- `DBC`
+- `IEF`
+- `GLD`
+- `HYG`
+- `XLB`
+- `XLE`
+- `XLF`
+- `XLI`
+- `XLK`
+- `XLP`
+- `XLU`
+- `XLV`
+- `XLY`
+- `XLRE`
+- `XLC`
 
-### Exit Criteria
-- Close price below 200-day moving average
-- OR 50-day moving average falls below 200-day moving average
-
-### Position Management
-- Equal weight between positions
-- Scale up to 100% in single ETF when appropriate
-- Allow position drift within tolerance bands
-- Minimal rebalancing to reduce turnover
+Each strategy keeps its own data under `data/<strategy_id>/`.
 
 ## Repository Structure
 
-- `backtester.py`: Main backtesting engine implementation
-- `data_fetcher.py`: Handles data acquisition for ETFs
-- `indicators.py`: Technical indicator calculations
-- `test_strategy.py`: Strategy testing and validation
-- `backtest_analysis.ipynb`: Jupyter notebook for analysis and visualization
-- `requirements.txt`: Python dependencies
+- `strategy_config.py`: strategy definitions, universes, and per-strategy data paths
+- `data_fetcher.py`: fetches daily data, builds weekly data, and saves per-strategy CSV files
+- `backtester.py`: shared backtest engine for both strategies
+- `indicators.py`: indicator calculations used by the backtest flow
+- `notebooks/core_strategy.py`: marimo notebook for the `core` strategy
+- `notebooks/sector_rotation_strategy.py`: marimo notebook for the `sector_rotation` strategy
+- `test_strategy.py`: pytest coverage for configs, notebooks, fetch behavior, and backtests
+- `pyproject.toml`: project metadata and dependencies managed by `uv`
+- `uv.lock`: locked dependency set for reproducible installs
 
-## Getting Started
+## Setup
 
-1. Clone the repository
+1. Clone the repository.
+
 ```bash
 git clone https://github.com/yourusername/Systematic-Low-Correlation-ETF-Trend-Strategy.git
+cd Systematic-Low-Correlation-ETF-Trend-Strategy
 ```
 
-2. Install dependencies
+2. Sync the environment with `uv`.
+
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
-3. Run the data fetcher and initialize the indicator values
+## Fetch Data
+
+Fetch data per strategy:
+
 ```bash
-python data_fetcher.py && python indicators.py
+uv run python data_fetcher.py core
+uv run python data_fetcher.py sector_rotation
 ```
 
-4. Run the backtester or open the Jupyter notebook
+This writes:
+
+- `data/core/daily_prices.csv`
+- `data/core/weekly_prices.csv`
+- `data/sector_rotation/daily_prices.csv`
+- `data/sector_rotation/weekly_prices.csv`
+
+## Run The Notebooks
+
+Open the marimo notebooks:
+
 ```bash
-python backtester.py
-```
-```bash
-jupyter notebook backtest_analysis.ipynb
+uv run marimo edit notebooks/core_strategy.py
+uv run marimo edit notebooks/sector_rotation_strategy.py
 ```
 
-5. Run test_strategy.py
+Or run them as apps:
+
 ```bash
-python test_strategy.py
+uv run marimo run notebooks/core_strategy.py
+uv run marimo run notebooks/sector_rotation_strategy.py
 ```
-This will output the actual trades that need to happen, when run.
+
+The notebooks do not auto-fetch data on startup. They load the cached strategy files if present and show a fetch command if the files are missing.
+
+## Run Tests
+
+```bash
+uv run pytest -q
+```
+
+## Current Data-Fetching Caveat
+
+The fetch layer still depends on `yfinance`. Notebook startup is stable now, but live fetches can still fail when Yahoo Finance returns empty or invalid responses. The notebooks handle that case with a concise error message instead of dumping provider noise into the session.
 
 ## Disclaimer
 
-This is a proof-of-concept implementation meant to demonstrate the strategy's mechanics and potential. It is not financial advice. The original strategy was designed and tested on Portfolio123's platform, and this implementation may have variations in results due to differences in data sources, execution assumptions, and implementation details.
-
-Always conduct your own research and consider consulting with financial professionals before implementing any trading strategy.
+This is a proof-of-concept implementation. It is not financial advice. The original strategy was designed and tested on Portfolio123, and this repo may produce different results because of data source differences and implementation details.
 
 ## Credits
 
@@ -122,4 +135,4 @@ Original strategy by [@quant_kurtis on Twitter](https://x.com/quant_kurtis/statu
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License. See `LICENSE`.
