@@ -17,7 +17,12 @@ logging.basicConfig(
 )
 
 # Constants
-ETF_UNIVERSE = ['TLT', 'TBF', 'DBC', 'IEF', 'GLD', 'QQQ', 'HYG']
+ETF_UNIVERSE = [
+    # Asset Class ETFs
+    'TLT', 'TBF', 'DBC', 'IEF', 'GLD', 'HYG',
+    # S&P Sector ETFs
+    'XLB', 'XLE', 'XLF', 'XLI', 'XLK', 'XLP', 'XLU', 'XLV', 'XLY', 'XLRE', 'XLC'
+]
 BENCHMARK = 'SPY'
 MAX_RETRIES = 3
 RETRY_DELAY = 60  # seconds
