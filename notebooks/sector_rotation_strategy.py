@@ -59,10 +59,10 @@ def _(fetch_button, fetch_strategy_data, mo, strategy):
     if not fetch_button.value:
         fetch_status = mo.md("Fetch has not been run in this session.")
     else:
-        daily_data, weekly_data = fetch_strategy_data(strategy)
-        if daily_data is None or weekly_data is None:
+        daily_data, weekly_data, error = fetch_strategy_data(strategy, log_errors=False)
+        if error is not None:
             fetch_status = mo.md(
-                f"Fetch failed for `{strategy.strategy_id}`. Check `data_fetcher.log` and the data provider state."
+                f"Fetch failed for `{strategy.strategy_id}`: {error}"
             )
         else:
             fetch_status = mo.md(

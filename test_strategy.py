@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from backtester import Backtester
+from data_fetcher import DataFetchError, fetch_data, fetch_strategy_data
 from strategy_config import get_strategy
 
 
@@ -105,6 +106,54 @@ def test_uv_project_metadata_declares_runtime_dependencies():
     assert "numpy==1.26.4" in dependencies
     assert "plotly==5.24.1" in dependencies
     assert "yfinance==0.2.36" in dependencies
+
+
+def test_fetch_data_raises_concise_error_after_empty_provider_response(monkeypatch):
+    empty_download = pd.DataFrame()
+
+    def fake_download(*args, **kwargs):
+        return empty_download
+
+    monkeypatch.setattr("data_fetcher.MAX_RETRIES", 1)
+    monkeypatch.setattr("data_fetcher.yf.download", fake_download)
+    monkeypatch.setattr("data_fetcher.time.sleep", lambda _: None)
+
+    try:
+        fetch_data(["TLT", "GLD"], benchmark="SPY")
+    except DataFetchError as exc:
+        assert "Yahoo Finance returned no price data" in str(exc)
+        assert "TLT" in str(exc)
+        assert "SPY" in str(exc)
+    else:
+        raise AssertionError("Expected DataFetchError")
+
+
+def test_fetch_strategy_data_returns_error_without_writing_files(monkeypatch, tmp_path):
+    strategy = get_strategy("core")
+
+    class DummyStrategy:
+        strategy_id = strategy.strategy_id
+        display_name = strategy.display_name
+        universe = strategy.universe
+        benchmark = strategy.benchmark
+        daily_prices_path = tmp_path / "daily_prices.csv"
+        weekly_prices_path = tmp_path / "weekly_prices.csv"
+        data_dir = tmp_path
+
+    monkeypatch.setattr(
+        "data_fetcher.fetch_data",
+        lambda *args, **kwargs: (_ for _ in ()).throw(DataFetchError("provider down")),
+    )
+
+    monkeypatch.setattr("data_fetcher.get_strategy", lambda _: DummyStrategy())
+
+    daily_data, weekly_data, error = fetch_strategy_data("core")
+
+    assert daily_data is None
+    assert weekly_data is None
+    assert error == "provider down"
+    assert not DummyStrategy.daily_prices_path.exists()
+    assert not DummyStrategy.weekly_prices_path.exists()
 
 
 def test_backtester_runs_with_core_strategy_fixture_data():
