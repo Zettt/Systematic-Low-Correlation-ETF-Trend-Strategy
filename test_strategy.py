@@ -1,87 +1,94 @@
-import pandas as pd
+from pathlib import Path
+
 import numpy as np
-from indicators import generate_allocations, check_entry_signals, check_exit_signals
+import pandas as pd
 
-def check_drift(current_allocations, target_allocations, tolerance=0.25):
-    """Check if any position has drifted beyond tolerance"""
-    for etf in current_allocations:
-        if etf not in target_allocations:
-            continue
-        target = target_allocations[etf]
-        actual = current_allocations[etf]
-        if abs(actual - target) > target * tolerance:
-            return True, etf, actual, target
-    return False, None, None, None
+from backtester import Backtester
+from strategy_config import get_strategy
 
-def test_signals():
-    """Test entry and exit signal generation"""
-    # Load data
-    daily_prices = pd.read_csv('data/daily_prices.csv')
-    weekly_prices = pd.read_csv('data/weekly_prices.csv')
-    
-    # Get latest signals
-    entry_signals = check_entry_signals(daily_prices)
-    exit_signals = check_exit_signals(daily_prices)
-    
-    print("\nLatest Signals:")
-    print("\nEntry Signals:")
-    for col in entry_signals.columns:
-        if entry_signals[col].iloc[-1]:
-            print(f"✓ {col.replace('_entry', '')}")
-        else:
-            print(f"✗ {col.replace('_entry', '')}")
-            
-    print("\nExit Signals:")
-    for col in exit_signals.columns:
-        if exit_signals[col].iloc[-1]:
-            print(f"⚠ {col.replace('_exit', '')}")
-        else:
-            print(f"  {col.replace('_exit', '')}")
 
-def test_allocations():
-    """Test allocation generation with and without holdings"""
-    # Load data
-    daily_prices = pd.read_csv('data/daily_prices.csv')
-    weekly_prices = pd.read_csv('data/weekly_prices.csv')
-    
-    # Test without holdings
-    print("\nNew Portfolio Allocations:")
-    allocations = generate_allocations(daily_prices, weekly_prices)
-    for etf, weight in allocations.items():
-        print(f"{etf}: {weight:.1%}")
-    
-    # Test with example holdings
-    test_holdings = {'TLT': 0.5, 'GLD': 0.5}
-    print("\nAllocations with Current Holdings:")
-    allocations = generate_allocations(daily_prices, weekly_prices, test_holdings)
-    for etf, weight in allocations.items():
-        print(f"{etf}: {weight:.1%}")
+def _build_price_frames(strategy_id):
+    strategy = get_strategy(strategy_id)
+    dates = pd.bdate_range("2020-01-01", periods=320)
+    base = np.linspace(100.0, 160.0, len(dates))
+    daily_data = {"Date": dates}
+    weekly_data = {"Date": pd.date_range(dates[0], periods=64, freq="W-FRI")}
 
-def test_drift():
-    """Test position drift from target allocations"""
-    # Load data
-    daily_prices = pd.read_csv('data/daily_prices.csv')
-    weekly_prices = pd.read_csv('data/weekly_prices.csv')
-    
-    # Example current holdings
-    test_holdings = {'TLT': 0.5, 'GLD': 0.5}
-    
-    # Get target allocations
-    target_allocs = generate_allocations(daily_prices, weekly_prices)
-    
-    # Check drift
-    has_drift, drifted_etf, actual, target = check_drift(test_holdings, target_allocs)
-    
-    print("\nPosition Drift Check:")
-    if has_drift:
-        print(f"⚠ {drifted_etf} has drifted: Current {actual:.1%} vs Target {target:.1%}")
-        print("Rebalancing recommended")
-    else:
-        print("✓ All positions within drift tolerance")
+    for index, ticker in enumerate(strategy.universe):
+        daily_data[ticker] = base + index * 3 + np.sin(np.linspace(0, 12, len(dates))) * (index + 1)
+        weekly_data[ticker] = np.linspace(100.0 + index, 155.0 + index, 64)
 
-if __name__ == "__main__":
-    print("Testing Strategy Implementation")
-    print("=" * 30)
-    test_signals()
-    test_allocations()
-    test_drift()
+    daily_data[strategy.benchmark] = np.linspace(100.0, 145.0, len(dates))
+    weekly_data[strategy.benchmark] = np.linspace(100.0, 140.0, 64)
+    return pd.DataFrame(daily_data), pd.DataFrame(weekly_data)
+
+
+def test_core_strategy_uses_expected_universe():
+    strategy = get_strategy("core")
+
+    assert strategy.universe == (
+        "TLT",
+        "TBF",
+        "DBC",
+        "IEF",
+        "GLD",
+        "QQQ",
+        "HYG",
+    )
+
+
+def test_sector_rotation_strategy_replaces_qqq_with_sectors():
+    strategy = get_strategy("sector_rotation")
+
+    assert "QQQ" not in strategy.universe
+    assert strategy.universe == (
+        "TLT",
+        "TBF",
+        "DBC",
+        "IEF",
+        "GLD",
+        "HYG",
+        "XLB",
+        "XLE",
+        "XLF",
+        "XLI",
+        "XLK",
+        "XLP",
+        "XLU",
+        "XLV",
+        "XLY",
+        "XLRE",
+        "XLC",
+    )
+
+
+def test_strategy_data_paths_are_separated():
+    core = get_strategy("core")
+    sector_rotation = get_strategy("sector_rotation")
+
+    assert core.data_dir == Path("data/core")
+    assert sector_rotation.data_dir == Path("data/sector_rotation")
+
+
+def test_backtester_runs_with_core_strategy_fixture_data():
+    daily_prices, weekly_prices = _build_price_frames("core")
+
+    backtester = Backtester(daily_prices, weekly_prices, strategy="core")
+    result = backtester.run_backtest(initial_capital=10_000, rebalance_freq="M")
+
+    assert result is backtester
+    assert backtester.equity_curve is not None
+    assert not backtester.equity_curve.dropna().empty
+    assert backtester.trades is not None
+
+
+def test_backtester_runs_with_sector_rotation_fixture_data():
+    daily_prices, weekly_prices = _build_price_frames("sector_rotation")
+
+    backtester = Backtester(daily_prices, weekly_prices, strategy="sector_rotation")
+    result = backtester.run_backtest(initial_capital=10_000, rebalance_freq="M")
+
+    assert result is backtester
+    assert backtester.equity_curve is not None
+    assert not backtester.equity_curve.dropna().empty
+    assert backtester.trades is not None
